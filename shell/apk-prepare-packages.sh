@@ -24,4 +24,22 @@ find "$BASE_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.apk" ! -path "$TEMP_DI
   -exec echo "👉 Found:" {} \; \
   -exec cp -v {} "$TARGET_DIR"/ \;
 
+# ======= 修改点：同名包去重，只保留最新版本 =======
+echo "🔧 正在对 $TARGET_DIR 中的同名包去重，保留最新版本..."
+cd "$TARGET_DIR"
+
+# ✏️ 改进1：兜底判断，无ipk文件时提前退出
+[ -e *.ipk ] || { echo "⚠️ 未找到任何 ipk 文件，跳过去重"; cd - >/dev/null; exit 0; }
+
+for pkgname in $(ls *.ipk 2>/dev/null | sed 's/_[0-9~].*//' | sort -u); do
+    count=$(ls ${pkgname}_*.ipk 2>/dev/null | wc -l)
+    if [ "$count" -gt 1 ]; then
+        # ✏️ 改进2：xargs加-r参数，空输入时不执行rm
+        ls ${pkgname}_*.ipk | sort -V | head -n -1 | xargs -r rm -f
+        echo "🗑️ 已删除 $pkgname 旧版本，保留: $(ls ${pkgname}_*.ipk)"
+    fi
+done
+cd - > /dev/null
+# ======= 修改点结束 =======
+
 echo "✅ 所有 .apk 文件已整理至 $TARGET_DIR/"
