@@ -33,6 +33,12 @@ else
   mkdir -p /home/build/immortalwrt/extra-packages
   cp -r /tmp/store-run-repo/run/x86/* /home/build/immortalwrt/extra-packages/
 
+  # ======= 修改点 1：同步自建插件库 store-extra =======
+  echo "🔄 正在同步扩展插件库 Cloning store-extra repo..."
+  git clone --depth=1 https://github.com/timeflysoon/store-extra.git /tmp/store-extra-repo
+  cp -r /tmp/store-extra-repo/run/x86/* /home/build/immortalwrt/extra-packages/
+  # ======= 修改点 1 结束 =======
+
   echo "✅ Run files copied to extra-packages:"
   ls -lh /home/build/immortalwrt/extra-packages/*.run
   # 解压并拷贝ipk到packages目录
