@@ -51,22 +51,58 @@ case "$board_name" in
         echo "Using $board_name mapping: WAN=$wan_ifname LAN=$lan_ifnames" >>"$LOGFILE"
         ;;
     *)
-        # 默认第一个接口为WAN，其余为LAN
-        wan_ifname=$(echo "$ifnames" | awk '{print $1}')
-        lan_ifnames=$(echo "$ifnames" | cut -d ' ' -f2-)
-        echo "Using default mapping: WAN=$wan_ifname LAN=$lan_ifnames" >>"$LOGFILE"
+        # ======== 修改点 1：WAN/LAN分配 改为第一个为LAN，最后一个为WAN ========
+        set -- $ifnames
+        if [ "$count" -eq 1 ]; then
+            lan_ifnames="$1"
+            wan_ifname=""
+            echo "MODE: SINGLE PORT (LAN only)" >> $LOGFILE
+        elif [ "$count" -eq 2 ]; then
+            lan_ifnames="$1"
+            wan_ifname="$2"
+            echo "MODE: DUAL PORT (LAN=$1, WAN=$2)" >> $LOGFILE
+        else
+            # 多口：第一个为 LAN，最后一个为 WAN，中间全部为 LAN
+            lan_ifnames="$1"
+            wan_ifname=$(eval echo \$${count})
+            i=2
+            while [ "$i" -lt "$count" ]; do
+                eval port=\$$i
+                lan_ifnames="$lan_ifnames $port"
+                i=$((i + 1))
+            done
+            echo "MODE: MULTI PORT (LAN=$lan_ifnames, WAN=$wan_ifname)" >> $LOGFILE
+        fi
+        # ======== 修改点 1 结束 ========
         ;;
 esac
 
 # 3. 配置网络
 if [ "$count" -eq 1 ]; then
-    # 单网口设备，DHCP模式
-    uci set network.lan.proto='dhcp'
-    uci delete network.lan.ipaddr
-    uci delete network.lan.netmask
-    uci delete network.lan.gateway
-    uci delete network.lan.dns
+    # ======== 修改点 2：单网口改为静态IP + 禁用DHCP 服务 ========
+    uci set network.lan.proto='static'
+    uci set network.lan.netmask='255.255.255.0'
+    
+    # 设置路由器管理后台地址
+    IP_VALUE_FILE="/etc/config/custom_router_ip.txt"
+    if [ -f "$IP_VALUE_FILE" ]; then
+        CUSTOM_IP=$(cat "$IP_VALUE_FILE" | tr -d '\r\n ')
+        uci set network.lan.ipaddr="$CUSTOM_IP"
+        echo "custom router ip is $CUSTOM_IP" >> $LOGFILE
+    else
+        uci set network.lan.ipaddr='192.168.100.1'
+        echo "default router ip is 192.168.100.1" >> $LOGFILE
+    fi
+
+    uci -q get dhcp.lan >/dev/null 2>&1 || uci set dhcp.lan=dhcp
+    uci set dhcp.lan.ignore='1'
+    uci set dhcp.lan.ra='disabled'
+    uci set dhcp.lan.dhcpv6='disabled'
+    echo "Single port mode: static IP, DHCP disabled" >> $LOGFILE
+    
     uci commit network
+    uci commit dhcp
+    # ======== 修改点 2 结束 ========
 elif [ "$count" -gt 1 ]; then
     # 多网口设备配置
     # 配置WAN
@@ -100,7 +136,9 @@ elif [ "$count" -gt 1 ]; then
     # 设置路由器管理后台地址
     IP_VALUE_FILE="/etc/config/custom_router_ip.txt"
     if [ -f "$IP_VALUE_FILE" ]; then
-        CUSTOM_IP=$(cat "$IP_VALUE_FILE")
+        # ======== 修改点 3：多网口分支也同步使用安全的 tr -d 清洗 ========
+        CUSTOM_IP=$(cat "$IP_VALUE_FILE" | tr -d '\r\n ')
+        # ======== 修改点 3 结束 ========
         # 用户在UI上设置的路由器后台管理地址
         uci set network.lan.ipaddr=$CUSTOM_IP
         echo "custom router ip is $CUSTOM_IP" >> $LOGFILE
@@ -133,11 +171,6 @@ uci delete ttyd.@ttyd[0].interface
 # 设置所有网口可连接 SSH
 uci set dropbear.@dropbear[0].Interface=''
 uci commit
-
-# 设置编译作者信息
-FILE_PATH="/etc/openwrt_release"
-NEW_DESCRIPTION="Packaged by wukongdaily"
-sed -i "s/DISTRIB_DESCRIPTION='[^']*'/DISTRIB_DESCRIPTION='$NEW_DESCRIPTION'/" "$FILE_PATH"
 
 # 若luci-app-advancedplus (进阶设置)已安装 则去除zsh的调用 防止命令行报 /usb/bin/zsh: not found的提示
 if [ -f /usr/lib/lua/luci/controller/advancedplus.lua ]; then
