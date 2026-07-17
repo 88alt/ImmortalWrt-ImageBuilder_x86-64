@@ -31,10 +31,12 @@
 # 任务设置 by sirpdboy
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-taskplan luci-i18n-taskplan-zh-cn"
 # ======== 修改点开始 ========
-# socat 端口转发
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-socat luci-i18n-socat-zh-cn"
+# Turbo ACC 网络加速
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-turboacc luci-i18n-turboacc-zh-cn"
 # iperf3 网络性能测试工具
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES iperf3"
+# socat 端口转发
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-socat luci-i18n-socat-zh-cn"
 # ======== 修改点结束 ========
 
 # 仓库内代理相关apk
