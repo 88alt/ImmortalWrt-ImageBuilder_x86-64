@@ -33,6 +33,12 @@ else
   mkdir -p /home/build/immortalwrt/extra-packages
   cp -r /tmp/store-apk-repo/run/x86/* /home/build/immortalwrt/extra-packages/
 
+  # ======= 修改点 1：同步自建插件库 apk-extra =======
+  echo "🔄 正在同步扩展插件库 Cloning apk-extra repo..."
+  git clone --depth=1 https://github.com/timeflysoon/apk-extra.git /tmp/apk-extra-repo
+  cp -r /tmp/apk-extra-repo/run/x86/* /home/build/immortalwrt/extra-packages/
+  # ======= 修改点 1 结束 =======
+
   echo "✅ Run files copied to extra-packages:"
   # 解压并拷贝apk到packages目录
   sh shell/apk-prepare-packages.sh
