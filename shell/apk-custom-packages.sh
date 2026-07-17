@@ -30,6 +30,12 @@
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-daed-zh-cn"
 # 任务设置 by sirpdboy
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-taskplan luci-i18n-taskplan-zh-cn"
+# ======== 修改点开始 ========
+# socat 端口转发
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-socat luci-i18n-socat-zh-cn"
+# iperf3 网络性能测试工具
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES iperf3"
+# ======== 修改点结束 ========
 
 # 仓库内代理相关apk
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-nikki-zh-cn"
