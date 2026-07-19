@@ -25,22 +25,59 @@ find "$BASE_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.apk" ! -path "$TEMP_DI
   -exec cp -v {} "$TARGET_DIR"/ \;
 
 # ======= 修改点：同名包去重，只保留最新版本 =======
-echo "🔧 正在对 $TARGET_DIR 中的同名包去重，保留最新版本..."
+# 说明：
+# 1) 不能简单按"第一个下划线+数字"切分包名，因为包名本身可能带
+#    数字（如 abc_2 vs abc_3、i18n-zh-cn 等），会把本质不同的两个
+#    包误判成同一包的不同版本，错误删除其中一个。这里先按已知的
+#    arch 后缀（如 x86_64 / all）剥离，再按剩余部分【最后一个下划线】
+#    切出版本号，包名前缀无论带不带数字都不会被误伤。
+# 2) 按 arch 分组比较，避免不同架构的同名包互相误删。
+# 3) 用"语义版本号"（sort -V）而不是文件 mtime 作为新旧判断依据：
+#    因为 cp 不带 -p，mtime 只反映"脚本里谁被复制的顺序更靠后"，
+#    与包的真实新旧毫无关系，按 mtime 保留反而可能留下更旧的版本。
+# 4) 若同名同版本号来自不同仓库，文件名完全一致，cp 阶段后到的会
+#    直接覆盖前一个，本去重逻辑不会再看到重复文件，不需要额外用
+#    时间戳判断"两者都一样时留哪个"。
+ARCH_LIST="x86_64 all"   # 按需修改为实际平台架构 + all（架构无关的luci包）
+
+echo "🔧 正在对 $TARGET_DIR 中的同名包去重（arch 列表: $ARCH_LIST），保留最新版本..."
 cd "$TARGET_DIR"
-# ✏️ 改进1：兜底判断，无apk文件时提前退出
+
 if ! ls *.apk >/dev/null 2>&1; then
     echo "⚠️ 未找到任何 apk 文件，跳过去重"
     cd - >/dev/null
     exit 0
 fi
-for pkgname in $(ls *.apk 2>/dev/null | sed 's/_[0-9~].*//' | sort -u); do
-    count=$(ls ${pkgname}_*.apk 2>/dev/null | wc -l)
-    if [ "$count" -gt 1 ]; then
-        # ✏️ 改进2：xargs加-r参数，空输入时不执行rm
-        ls ${pkgname}_*.apk | sort -V | head -n -1 | xargs -r rm -f
-        echo "🗑️ 已删除 $pkgname 旧版本，保留: $(ls ${pkgname}_*.apk)"
-    fi
+
+for TARGET_ARCH in $ARCH_LIST; do
+    pkgnames=$(for f in *.apk; do
+        base="${f%.apk}"
+        nv="${base%_${TARGET_ARCH}}"
+        [ "$nv" = "$base" ] && continue   # 不属于当前 arch，跳过
+        echo "${nv%_*}"
+    done | sort -u)
+
+    [ -z "$pkgnames" ] && continue
+
+    printf '%s\n' "$pkgnames" | while IFS= read -r pkgname; do
+        [ -z "$pkgname" ] && continue
+        matches=$(for f in *.apk; do
+            base="${f%.apk}"
+            nv="${base%_${TARGET_ARCH}}"
+            [ "$nv" = "$base" ] && continue
+            pn="${nv%_*}"
+            [ "$pn" = "$pkgname" ] && echo "$f"
+        done)
+        # POSIX 安全计数，不用 wc -l <<<（BusyBox ash 可能不支持 here-string）
+        count=$(printf '%s\n' "$matches" | grep -c .)
+        if [ "$count" -gt 1 ]; then
+            keep=$(printf '%s\n' "$matches" | sort -V | tail -n1)
+            printf '%s\n' "$matches" | grep -v -F -x "$keep" | xargs -r rm -f
+            echo "🗑️ 已删除 $pkgname($TARGET_ARCH) 旧版本，保留: $keep"
+        fi
+    done
 done
+
 cd - > /dev/null
 # ======= 修改点结束 =======
 
