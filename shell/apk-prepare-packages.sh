@@ -59,6 +59,8 @@ find "$BASE_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.apk" ! -path "$TEMP_DI
 # ============================================================
 WHITELIST_FILES="
 luci-app-quickstart-0.12.8-r1.apk
+luci-app-turboacc-26.173.86210~6909fa3-r1.apk
+luci-i18n-turboacc-zh-cn-26.173.86210~6909fa3.apk
 "
 # ============================================================
 # ★★★★★ 白名单区域结束 ★★★★★
