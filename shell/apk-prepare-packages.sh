@@ -48,7 +48,7 @@ find "$BASE_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.apk" ! -path "$TEMP_DI
   -exec echo "👉 Found:" {} \; \
   -exec cp -v {} "$TARGET_DIR"/ \;
 
-# ======= 修改点：先白名单强制覆盖，再同名包去重，只保留最新版本（apk 版）=======
+# ======= 修改点：先白名单强制覆盖，再同名同架构去重只保留最新版本（apk 版）=======
 # ★★★ 白名单区域 —— 手动维护，按需增删 ★★★
 # 命中 pkgname+arch 相同即强制只保留白名单文件，其余同包版本
 # （不论新旧、不论来源仓库）全部删除，不比较版本号。
