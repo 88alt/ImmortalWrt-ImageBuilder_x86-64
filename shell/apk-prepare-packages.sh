@@ -43,18 +43,20 @@ find "$BASE_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.apk" ! -path "$TEMP_DI
 # 4) 用 pkgver 做"语义版本号"（sort -V）比较，而不是文件 mtime：
 #    因为 cp 不带 -p，mtime 只反映"脚本里谁被复制的顺序更靠后"，
 #    与包的真实新旧毫无关系，按 mtime 保留反而可能留下更旧的版本。
+#    排序时只取纯 pkgver 字段参与 sort -V（不掺杂文件名/arch/扩展名），
+#    避免字符边界干扰导致 release 号比较出错（如 3.0.13 vs 3.0.13-r2）。
 # 5) 若同名同版本号来自不同仓库，文件名完全一致，cp 阶段后到的会
 #    直接覆盖前一个，本去重逻辑不会再看到重复文件，不需要额外用
 #    时间戳判断"两者都一样时留哪个"。
+# 6) ls *.apk / rm -f 前都显式加 --，防御极少数情况下包名以 - 开头
+#    时被 ls/rm 误当成命令行选项解析，导致误报"未找到文件"或删除失败。
 echo "🔧 正在对 $TARGET_DIR 中的同名包去重（apk），保留最新版本..."
 cd "$TARGET_DIR"
-
-if ! ls *.apk >/dev/null 2>&1; then
+if ! ls -- *.apk >/dev/null 2>&1; then
     echo "⚠️ 未找到任何 apk 文件，跳过去重"
     cd - >/dev/null
     exit 0
 fi
-
 # 建立索引: "文件名<TAB>pkgname<TAB>arch<TAB>pkgver"
 # 通过读取每个 apk 包内的 .PKGINFO 获取真实元数据，而非猜测文件名结构
 index=$(for f in *.apk; do
@@ -69,34 +71,27 @@ index=$(for f in *.apk; do
     [ -z "$pn" ] && continue
     printf '%s\t%s\t%s\t%s\n' "$f" "$pn" "$pa" "$pv"
 done)
-
 if [ -z "$index" ]; then
     echo "⚠️ 未能解析任何包元数据，跳过去重"
     cd - >/dev/null
     exit 0
 fi
-
 # 取出所有出现过的 (pkgname, arch) 组合，逐组比较版本
 keys=$(printf '%s\n' "$index" | awk -F'\t' '{print $2"\t"$3}' | sort -u)
-
 printf '%s\n' "$keys" | while IFS="$(printf '\t')" read -r pkgname arch; do
     [ -z "$pkgname" ] && continue
-
     # 该 (pkgname, arch) 下所有文件: "pkgver<TAB>文件名"
     lines=$(printf '%s\n' "$index" | awk -F'\t' -v pn="$pkgname" -v ar="$arch" \
         '$2==pn && $3==ar {print $4"\t"$1}')
-
     # POSIX 安全计数，不用 wc -l <<<（BusyBox ash 可能不支持 here-string）
     count=$(printf '%s\n' "$lines" | grep -c .)
-
     if [ "$count" -gt 1 ]; then
         # 按 pkgver 做版本号排序（sort -V），取最新的一个保留
         keep=$(printf '%s\n' "$lines" | sort -t"$(printf '\t')" -k1,1V | tail -n1 | cut -f2)
-        printf '%s\n' "$lines" | cut -f2 | grep -v -F -x "$keep" | xargs -r rm -f
+        printf '%s\n' "$lines" | cut -f2 | grep -v -F -x "$keep" | xargs -r rm -f --
         echo "🗑️ 已删除 $pkgname($arch) 旧版本，保留: $keep"
     fi
 done
-
 cd - > /dev/null
 # ======= 修改点结束 =======
 
