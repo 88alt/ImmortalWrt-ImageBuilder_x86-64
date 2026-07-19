@@ -27,10 +27,12 @@ find "$BASE_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.ipk" ! -path "$TEMP_DI
 # ======= 修改点：同名包去重，只保留最新版本 =======
 echo "🔧 正在对 $TARGET_DIR 中的同名包去重，保留最新版本..."
 cd "$TARGET_DIR"
-
 # ✏️ 改进1：兜底判断，无ipk文件时提前退出
-[ -e *.ipk ] || { echo "⚠️ 未找到任何 ipk 文件，跳过去重"; cd - >/dev/null; exit 0; }
-
+if ! ls *.ipk >/dev/null 2>&1; then
+    echo "⚠️ 未找到任何 ipk 文件，跳过去重"
+    cd - >/dev/null
+    exit 0
+fi
 for pkgname in $(ls *.ipk 2>/dev/null | sed 's/_[0-9~].*//' | sort -u); do
     count=$(ls ${pkgname}_*.ipk 2>/dev/null | wc -l)
     if [ "$count" -gt 1 ]; then
