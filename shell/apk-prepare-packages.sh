@@ -24,21 +24,65 @@ find "$BASE_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.apk" ! -path "$TEMP_DI
   -exec echo "👉 Found:" {} \; \
   -exec cp -v {} "$TARGET_DIR"/ \;
 
-# ======= 修改点：同名包去重，只保留最新版本（apk 版）=======
-# - apk 文件名不带 arch 后缀、分隔符是连字符（如 https-dns-proxy-2023.12.26-r1.apk），
-#   与 ipk 命名规则不同，不能照搬 ipk 的切分逻辑；改为直接从包内 .PKGINFO 读取
-#   真实的 pkgname/pkgver/arch（tar 遇内部 tar-EOF 会自动停在控制信息段，不会
-#   继续解析数据段）。
-# - 按 (pkgname, arch) 分组比较，避免不同架构互相误删。
-# - 用 pkgver（sort -V，只取纯版本号字段）判断新旧，不用 mtime，原因同 ipk 版。
-# - ls/rm 前加 -- 防御包名以 "-" 开头时被误当命令行选项解析。
-echo "🔧 正在对 $TARGET_DIR 中的同名包去重（apk），保留最新版本..."
+#!/bin/sh
+BASE_DIR="extra-packages"
+TEMP_DIR="$BASE_DIR/temp-unpack"
+TARGET_DIR="packages"
+
+# 清理旧的目录
+rm -rf "$TEMP_DIR" "$TARGET_DIR"
+mkdir -p "$TEMP_DIR" "$TARGET_DIR"
+
+# 解压 .run 文件
+for run_file in "$BASE_DIR"/*.run; do
+    [ -e "$run_file" ] || continue
+    echo "🧩 解压 $run_file -> $TEMP_DIR"
+    sh "$run_file" --target "$TEMP_DIR" --noexec
+done
+
+# 1. 收集 run 解压出的 .apk 文件
+find "$TEMP_DIR" -type f -name "*.apk" -exec cp -v {} "$TARGET_DIR"/ \;
+
+# 2. 收集 extra-packages/*/ 下的 .apk 文件（只查一级子目录）
+find "$BASE_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.apk" ! -path "$TEMP_DIR/*" \
+  -exec echo "👉 Found:" {} \; \
+  -exec cp -v {} "$TARGET_DIR"/ \;
+
+# ======= 修改点：先白名单强制覆盖，再同名包去重，只保留最新版本（apk 版）=======
+# ★★★★★ 白名单区域 —— 需要手动维护，请按需增删 ★★★★★
+# 规则：只要某个 apk 的 pkgname 与下方白名单中任意一项解析出的
+# pkgname 相同（且 arch 相同），就会强制只保留白名单指定的这个
+# 完整文件名，其余同 pkgname 的版本（不论新旧、来自哪个仓库）
+# 一律删除，不比较版本号。
+#
+# 填写方式：填完整文件名，一行一个，例如：
+#   luci-app-quickstart-0.12.8-r1.apk
+#
+# 注意：
+#   1. 文件名必须与 TARGET_DIR 中实际存在的文件名完全一致，
+#      否则该条白名单会被判定为"未找到"并跳过（不会报错中断构建，
+#      但会打印警告，请留意构建日志）。
+#   2. 不再需要强制指定某个包版本时，直接删除对应行即可，
+#      该包会自动回退到下面的"版本去重兜底"逻辑（保留最新版本）。
+#   3. 每行一个文件名，不要加路径，不要加空格。
+# ============================================================
+WHITELIST_FILES="
+luci-app-quickstart-0.12.8-r1.apk
+"
+# ============================================================
+# ★★★★★ 白名单区域结束 ★★★★★
+# ============================================================
+
+echo "🔧 正在整理 $TARGET_DIR 中的包（白名单强制模式 + 版本去重兜底）..."
 cd "$TARGET_DIR"
+
 if ! ls -- *.apk >/dev/null 2>&1; then
-    echo "⚠️ 未找到任何 apk 文件，跳过去重"
+    echo "⚠️ 未找到任何 apk 文件，跳过整理"
     cd - >/dev/null
     exit 0
 fi
+
+# 建立全量索引：文件名 \t pkgname \t arch \t pkgver
 index=$(for f in *.apk; do
     info=$(tar -xzf "$f" -O .PKGINFO 2>/dev/null)
     if [ -z "$info" ]; then
@@ -51,23 +95,83 @@ index=$(for f in *.apk; do
     [ -z "$pn" ] && continue
     printf '%s\t%s\t%s\t%s\n' "$f" "$pn" "$pa" "$pv"
 done)
+
 if [ -z "$index" ]; then
-    echo "⚠️ 未能解析任何包元数据，跳过去重"
+    echo "⚠️ 未能解析任何包元数据，跳过整理"
     cd - >/dev/null
     exit 0
 fi
+
+# ------------------------------------------------------------
+# 阶段一：白名单强制覆盖
+# 对白名单里每个文件名，精确解析出它的 (pkgname, arch)，
+# 然后把索引中所有 (pkgname, arch) 相同的文件里，
+# 除白名单指定的那个文件名以外的全部删除。
+# 被白名单处理过的 (pkgname, arch) 会记录下来，
+# 阶段二的版本去重会跳过它们，避免重复处理。
+# ------------------------------------------------------------
+handled_keys=""
+
+for wf in $WHITELIST_FILES; do
+    [ -z "$wf" ] && continue
+
+    # 精确匹配：文件名字段（第1列）与白名单条目完全相等
+    wline=$(printf '%s\n' "$index" | awk -F'\t' -v want="$wf" '$1==want {print; exit}')
+
+    if [ -z "$wline" ]; then
+        echo "⚠️ 白名单条目未在 $TARGET_DIR 中找到，已跳过: $wf" >&2
+        continue
+    fi
+
+    wpn=$(printf '%s' "$wline" | cut -f2)
+    wpa=$(printf '%s' "$wline" | cut -f3)
+
+    # 找出同 pkgname + arch 的所有文件（含白名单文件自己）
+    same=$(printf '%s\n' "$index" | awk -F'\t' -v pn="$wpn" -v ar="$wpa" \
+        '$2==pn && $3==ar {print $1}')
+
+    # 删除除白名单文件外的其余同包文件
+    to_remove=$(printf '%s\n' "$same" | grep -v -F -x "$wf")
+    if [ -n "$to_remove" ]; then
+        printf '%s\n' "$to_remove" | xargs -r rm -f --
+        echo "🔒 白名单强制保留 [$wf]，已删除同包($wpn/$wpa)其余版本："
+        printf '%s\n' "$to_remove" | sed 's/^/     - /'
+    else
+        echo "🔒 白名单强制保留 [$wf]（未发现同包其余版本，无需删除）"
+    fi
+
+    handled_keys="$handled_keys
+$wpn	$wpa"
+done
+
+# ------------------------------------------------------------
+# 阶段二：版本去重兜底
+# 仅处理未被白名单覆盖的 (pkgname, arch) 分组，
+# 逻辑与原版一致：按 pkgver（sort -V）保留最新版本。
+# ------------------------------------------------------------
 keys=$(printf '%s\n' "$index" | awk -F'\t' '{print $2"\t"$3}' | sort -u)
+
 printf '%s\n' "$keys" | while IFS="$(printf '\t')" read -r pkgname arch; do
     [ -z "$pkgname" ] && continue
+
+    # 跳过已被白名单处理过的 (pkgname, arch)
+    if printf '%s\n' "$handled_keys" | grep -q -F -x "$(printf '%s\t%s' "$pkgname" "$arch")"; then
+        continue
+    fi
+
     lines=$(printf '%s\n' "$index" | awk -F'\t' -v pn="$pkgname" -v ar="$arch" \
         '$2==pn && $3==ar {print $4"\t"$1}')
     count=$(printf '%s\n' "$lines" | grep -c .)
     if [ "$count" -gt 1 ]; then
+        # 注意：白名单阶段可能已经删除了部分文件，这里重新以磁盘上
+        # 实际残留的文件为准，避免误删已被删除的文件名（xargs rm -f
+        # 对不存在文件本身是安全的，不会报错中断）
         keep=$(printf '%s\n' "$lines" | sort -t"$(printf '\t')" -k1,1V | tail -n1 | cut -f2)
         printf '%s\n' "$lines" | cut -f2 | grep -v -F -x "$keep" | xargs -r rm -f --
         echo "🗑️ 已删除 $pkgname($arch) 旧版本，保留: $keep"
     fi
 done
+
 cd - > /dev/null
 # ======= 修改点结束 =======
 
