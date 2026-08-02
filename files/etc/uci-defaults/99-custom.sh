@@ -115,8 +115,10 @@ elif [ "$count" -gt 1 ]; then
     uci set network.wan6.device="$wan_ifname"
     uci set network.wan6.proto='dhcpv6'
 
+    # ======== 修改点 3：BusyBox awk 不支持 \d，正则改为 [0-9]+，否则永远匹配不到 br-lan 设备段 ========
     # 查找 br-lan 设备 section
-    section=$(uci show network | awk -F '[.=]' '/\.@?device\[\d+\]\.name=.br-lan.$/ {print $2; exit}')
+    section=$(uci show network | awk -F '[.=]' '/\.@?device\[[0-9]+\]\.name=.br-lan.$/ {print $2; exit}')
+    # ======== 修改点 3 结束 ========
     if [ -z "$section" ]; then
         echo "error：cannot find device 'br-lan'." >>$LOGFILE
     else
@@ -136,9 +138,9 @@ elif [ "$count" -gt 1 ]; then
     # 设置路由器管理后台地址
     IP_VALUE_FILE="/etc/config/custom_router_ip.txt"
     if [ -f "$IP_VALUE_FILE" ]; then
-        # ======== 修改点 3：多网口分支也同步使用安全的 tr -d 清洗 ========
+        # ======== 修改点 4：多网口分支也同步使用安全的 tr -d 清洗 ========
         CUSTOM_IP=$(cat "$IP_VALUE_FILE" | tr -d '\r\n ')
-        # ======== 修改点 3 结束 ========
+        # ======== 修改点 4 结束 ========
         # 用户在UI上设置的路由器后台管理地址
         uci set network.lan.ipaddr=$CUSTOM_IP
         echo "custom router ip is $CUSTOM_IP" >> $LOGFILE
