@@ -18,6 +18,12 @@ on:
           - 25.12.0-rc2
           - 25.12.0
           - 25.12.1
+      # ======== 修改点 1：补上自定义路由器管理IP的输入项，对齐非ISO版workflow ========
+      custom_router_ip:
+        description: "请设置路由器的管理地址(仅对多网口路由器有效) 格式:192.168.x.1 或 10.x.x.1"
+        required: true
+        default: "192.168.100.1"
+      # ======== 修改点 1 结束 ========
       profile:
         description: '请输入要编译固件大小 单位(MB)'
         required: true
@@ -63,7 +69,15 @@ jobs:
 
       - name: Set executable permissions
         run: chmod +x ${{ github.workspace }}/x86-64/build25.sh
-      
+
+      # ======== 修改点 2：补上写入自定义IP文件的步骤，对齐非ISO版workflow ========
+      - name: Save Custom Router IP into OpenWrt files
+        run: |
+          mkdir -p "${{ github.workspace }}/custom"
+          echo "${{ github.event.inputs.custom_router_ip }}" > "${{ github.workspace }}/custom/custom_router_ip.txt"
+          echo "您设置的路由器管理地址是:${{ github.event.inputs.custom_router_ip }}"
+      # ======== 修改点 2 结束 ========
+
       - name: Validate PPPoE Inputs
         run: |
           if [[ "${{ github.event.inputs.enable_pppoe }}" == "yes" ]]; then
@@ -87,6 +101,7 @@ jobs:
           include_docker="${{ github.event.inputs.include_docker }}"
           luci_version="${{ github.event.inputs.luci_version }}"
           echo "Building for profile: $profile"
+          # ======== 修改点 3：传入 GITHUB_TOKEN，避免容器内 curl 调 GitHub API 时被匿名限流(60次/小时) ========
           docker run --rm -i \
             --user root \
             -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
@@ -100,7 +115,9 @@ jobs:
             -e ENABLE_PPPOE=${{ inputs.enable_pppoe }} \
             -e PPPOE_ACCOUNT=${{ inputs.pppoe_account }} \
             -e PPPOE_PASSWORD=${{ inputs.pppoe_password }} \
+            -e GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} \
           immortalwrt/imagebuilder:x86-64-openwrt-${luci_version} /bin/bash /home/build/immortalwrt/build.sh
+          # ======== 修改点 3 结束 ========
 
       - name: ✅ 复制固件到根目录
         run: |
