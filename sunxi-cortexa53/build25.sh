@@ -82,12 +82,19 @@ if echo "$PACKAGES" | grep -q "luci-app-openclash"; then
     wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat -O files/etc/openclash/GeoIP.dat
     wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat -O files/etc/openclash/GeoSite.dat
     # Download latest openclash Client
-    URL=$(curl -s https://api.github.com/repos/vernesong/OpenClash/releases/latest \
+    # ======== 修改点 2：curl 加认证头避免被 GitHub API 匿名限流；URL 为空时明确报错退出，而不是带着空链接继续构建 ========
+    URL=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+      https://api.github.com/repos/vernesong/OpenClash/releases/latest \
       | grep "browser_download_url.*apk" \
       | head -n1 \
       | cut -d '"' -f 4)
+    if [ -z "$URL" ]; then
+        echo "❌ 获取 OpenClash apk 下载地址失败（可能被 GitHub API 限流，或该 release 下没有匹配的 apk 资源）"
+        exit 1
+    fi
     echo "OpenClash latest apk: $URL"
     wget "$URL" -P /home/build/immortalwrt/packages/
+    # ======== 修改点 2 结束 ========
 else
     echo "⚪️ 未选择 luci-app-openclash"
 fi
