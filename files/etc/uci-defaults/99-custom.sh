@@ -174,6 +174,8 @@ uci delete ttyd.@ttyd[0].interface
 uci set dropbear.@dropbear[0].Interface=''
 uci commit
 
+# ======== 修改点 5：删除"设置编译作者信息" ========
+
 # 若luci-app-advancedplus (进阶设置)已安装 则去除zsh的调用 防止命令行报 /usb/bin/zsh: not found的提示
 if [ -f /usr/lib/lua/luci/controller/advancedplus.lua ]; then
     sed -i '/\/usr\/bin\/zsh/d' /etc/profile
