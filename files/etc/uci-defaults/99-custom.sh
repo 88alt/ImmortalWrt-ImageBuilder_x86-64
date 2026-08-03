@@ -90,8 +90,10 @@ if [ "$count" -eq 1 ]; then
         uci set network.lan.ipaddr="$CUSTOM_IP"
         echo "custom router ip is $CUSTOM_IP" >> $LOGFILE
     else
-        uci set network.lan.ipaddr='192.168.100.1'
-        echo "default router ip is 192.168.100.1" >> $LOGFILE
+        # ======== 修改点 6：默认路由器管理IP 由 192.168.100.1 改为 192.168.2.1 ========
+        uci set network.lan.ipaddr='192.168.2.1'
+        echo "default router ip is 192.168.2.1" >> $LOGFILE
+        # ======== 修改点 6 结束 ========
     fi
 
     uci -q get dhcp.lan >/dev/null 2>&1 || uci set dhcp.lan=dhcp
@@ -145,8 +147,10 @@ elif [ "$count" -gt 1 ]; then
         uci set network.lan.ipaddr=$CUSTOM_IP
         echo "custom router ip is $CUSTOM_IP" >> $LOGFILE
     else
-        uci set network.lan.ipaddr='192.168.100.1'
-        echo "default router ip is 192.168.100.1" >> $LOGFILE
+        # ======== 修改点 5：默认路由器管理IP 由 192.168.100.1 改为 192.168.2.1 ========
+        uci set network.lan.ipaddr='192.168.2.1'
+        echo "default router ip is 192.168.2.1" >> $LOGFILE
+        # ======== 修改点 5 结束 ========
     fi
 
     # PPPoE设置
@@ -174,7 +178,7 @@ uci delete ttyd.@ttyd[0].interface
 uci set dropbear.@dropbear[0].Interface=''
 uci commit
 
-# ======== 修改点 5：删除"设置编译作者信息" ========
+# ======== 修改点 6：删除"设置编译作者信息" ========
 
 # 若luci-app-advancedplus (进阶设置)已安装 则去除zsh的调用 防止命令行报 /usb/bin/zsh: not found的提示
 if [ -f /usr/lib/lua/luci/controller/advancedplus.lua ]; then
