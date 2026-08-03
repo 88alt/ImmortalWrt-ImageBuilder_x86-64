@@ -15,7 +15,7 @@ on:
       custom_router_ip:
         description: "请设置路由器的管理地址(仅对多网口路由器有效) 格式:192.168.x.1 或 10.x.x.1"
         required: true
-        default: "192.168.100.1"
+        default: "192.168.2.1"
       profile:
         description: '请输入要编译固件大小 单位(MB)'
         required: true
@@ -34,6 +34,18 @@ on:
         options:
           - 'yes'
           - 'no'
+      # ======== 修改点 1：新增第三方插件配置方案选择，对应不同路由器专属插件包，默认沿用 shell/apk-custom-packages.sh ========
+      package_profile:
+        description: "选择第三方插件配置方案(对应不同路由器)"
+        required: true
+        type: choice
+        default: 'default'
+        options:
+          - 'default'
+          - '192.168.2.1'
+          - '192.168.2.2'
+          - '192.168.2.5'
+      # ======== 修改点 1 结束 ========
       enable_pppoe:
         description: "是否配置PPPoE拨号信息?"
         required: true
@@ -93,8 +105,9 @@ jobs:
           profile="${{ github.event.inputs.profile }}"
           include_docker="${{ github.event.inputs.include_docker }}"
           luci_version="${{ github.event.inputs.luci_version }}"
-          echo "Building for profile: $profile"
-          # ======== 修改点 1：传入 GITHUB_TOKEN，避免容器内 curl 调 GitHub API 时被匿名限流(60次/小时) ========
+          package_profile="${{ github.event.inputs.package_profile }}"
+          echo "Building for profile(MB): $profile"
+          # ======== 修改点 2：传入 GITHUB_TOKEN，避免容器内 curl 调 GitHub API 时被匿名限流(60次/小时) ========
           docker run --rm -i \
             --user root \
             -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
@@ -103,14 +116,15 @@ jobs:
             -v "${{ github.workspace }}/x86-64/imm25.config:/home/build/immortalwrt/.config" \
             -v "${{ github.workspace }}/shell:/home/build/immortalwrt/shell" \
             -v "${{ github.workspace }}/x86-64/build25.sh:/home/build/immortalwrt/build.sh" \
-            -e PROFILE=$ROOTFS_SIZE \
+            -e PROFILE=$profile \
             -e INCLUDE_DOCKER=$include_docker \
             -e ENABLE_PPPOE=${{ inputs.enable_pppoe }} \
             -e PPPOE_ACCOUNT=${{ inputs.pppoe_account }} \
             -e PPPOE_PASSWORD=${{ inputs.pppoe_password }} \
+            -e PACKAGE_PROFILE=$package_profile \
             -e GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} \
           immortalwrt/imagebuilder:x86-64-openwrt-${luci_version} /bin/bash /home/build/immortalwrt/build.sh
-          # ======== 修改点 1 结束 ========          
+          # ======== 修改点 2 结束（内含修改点 3：修正 PROFILE 引用错误，原来错误引用了未定义的$ROOTFS_SIZE，现直接使用已是MB数值的$profile；另新增 PACKAGE_PROFILE 透传，见修改点 1） ========
 
       - name: Create info
         run: |
