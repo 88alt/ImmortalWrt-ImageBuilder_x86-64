@@ -1,6 +1,20 @@
 #!/bin/bash
 # Log file for debugging
-source shell/custom-packages.sh
+# ======== 修改点 1：根据 PACKAGE_PROFILE 环境变量选择对应的第三方插件配置文件；default 或未设置时仍使用 shell/custom-packages.sh ========
+if [ -z "$PACKAGE_PROFILE" ] || [ "$PACKAGE_PROFILE" = "default" ]; then
+    PKG_PROFILE_FILE="shell/custom-packages.sh"
+else
+    PKG_PROFILE_FILE="shell/custom-packages_${PACKAGE_PROFILE}.sh"
+fi
+
+if [ -f "$PKG_PROFILE_FILE" ]; then
+    echo "✅ 使用插件配置文件: $PKG_PROFILE_FILE"
+    source "$PKG_PROFILE_FILE"
+else
+    echo "⚠️ 未找到 $PKG_PROFILE_FILE，回退使用默认配置 shell/custom-packages.sh"
+    source shell/custom-packages.sh
+fi
+# ======== 修改点 1 结束 ========
 source shell/switch_repository.sh
 echo "第三方软件包: $CUSTOM_PACKAGES"
 LOGFILE="/tmp/uci-defaults-log.txt"
@@ -33,11 +47,11 @@ else
   mkdir -p /home/build/immortalwrt/extra-packages
   cp -r /tmp/store-run-repo/run/x86/* /home/build/immortalwrt/extra-packages/
 
-  # ======= 修改点 1：同步自建插件库 store-extra =======
+  # ======= 修改点 2：同步自建插件库 store-extra =======
   echo "🔄 正在同步扩展插件库 Cloning store-extra repo..."
   git clone --depth=1 https://github.com/timeflysoon/store-extra.git /tmp/store-extra-repo
   cp -r /tmp/store-extra-repo/run/x86/* /home/build/immortalwrt/extra-packages/
-  # ======= 修改点 1 结束 =======
+  # ======= 修改点 2 结束 =======
 
   echo "✅ Run files copied to extra-packages:"
   ls -lh /home/build/immortalwrt/extra-packages/*.run
