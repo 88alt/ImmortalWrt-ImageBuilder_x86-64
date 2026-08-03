@@ -21,6 +21,12 @@ on:
           - 24.10.4
           - 24.10.5
           - 24.10.6
+      # ======== 修改点 1：补上自定义路由器管理IP的输入项，对齐非ISO版workflow ========
+      custom_router_ip:
+        description: "请设置路由器的管理地址(仅对多网口路由器有效) 格式:192.168.x.1 或 10.x.x.1"
+        required: true
+        default: "192.168.2.1"
+      # ======== 修改点 1 结束 ========
       profile:
         description: '请输入要编译固件大小 单位(MB)'
         required: true
@@ -33,6 +39,18 @@ on:
         options:
           - 'yes'
           - 'no'
+      # ======== 修改点 2：新增第三方插件配置方案选择，对应不同路由器专属插件包，默认沿用 shell/custom-packages.sh ========
+      package_profile:
+        description: "选择第三方插件配置方案(对应不同路由器)"
+        required: true
+        type: choice
+        default: 'default'
+        options:
+          - 'default'
+          - '192.168.2.1'
+          - '192.168.2.2'
+          - '192.168.2.5'
+      # ======== 修改点 2 结束 ========
       enable_store:
         description: "集成 store 商店"
         required: false
@@ -66,7 +84,15 @@ jobs:
 
       - name: Set executable permissions
         run: chmod +x ${{ github.workspace }}/x86-64/build24.sh
-      
+
+      # ======== 修改点 3：补上写入自定义IP文件的步骤，对齐非ISO版workflow ========
+      - name: Save Custom Router IP into OpenWrt files
+        run: |
+          mkdir -p "${{ github.workspace }}/custom"
+          echo "${{ github.event.inputs.custom_router_ip }}" > "${{ github.workspace }}/custom/custom_router_ip.txt"
+          echo "您设置的路由器管理地址是:${{ github.event.inputs.custom_router_ip }}"
+      # ======== 修改点 3 结束 ========
+
       - name: Enable Store integration
         run: |
           if [ "${{ github.event.inputs.enable_store }}" == "true" ]; then
@@ -85,29 +111,31 @@ jobs:
             fi
           fi
 
+      # ======== 修改点 4：去掉逗号分割多profile循环构建，统一为单一MB数值直接构建，与非ISO版一致；新增 GITHUB_TOKEN、PACKAGE_PROFILE 透传及自定义IP配置的挂载 ========
       - name: ✅ 正在构建ImmortalWrt固件
         run: |
-          profiles="${{ github.event.inputs.profile }}"
+          profile="${{ github.event.inputs.profile }}"
           include_docker="${{ github.event.inputs.include_docker }}"
           luci_version="${{ github.event.inputs.luci_version }}"
-          IFS=',' read -r -a profile_array <<< "$profiles"
-          
-          for profile in "${profile_array[@]}"; do
-            echo "Building for profile: $profile"
-            docker run --rm -i \
-              --user root \
-              -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
-              -v "${{ github.workspace }}/files:/home/build/immortalwrt/files" \
-              -v "${{ github.workspace }}/x86-64/imm.config:/home/build/immortalwrt/.config" \
-              -v "${{ github.workspace }}/shell:/home/build/immortalwrt/shell" \
-              -v "${{ github.workspace }}/x86-64/build24.sh:/home/build/immortalwrt/build.sh" \
-              -e PROFILE=$profile \
-              -e INCLUDE_DOCKER=$include_docker \
-              -e ENABLE_PPPOE=${{ inputs.enable_pppoe }} \
-              -e PPPOE_ACCOUNT=${{ inputs.pppoe_account }} \
-              -e PPPOE_PASSWORD=${{ inputs.pppoe_password }} \
-              immortalwrt/imagebuilder:x86-64-openwrt-${luci_version} /bin/bash /home/build/immortalwrt/build.sh
-          done
+          package_profile="${{ github.event.inputs.package_profile }}"
+          echo "Building for profile(MB): $profile"
+          docker run --rm -i \
+            --user root \
+            -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
+            -v "${{ github.workspace }}/files:/home/build/immortalwrt/files" \
+            -v "${{ github.workspace }}/custom:/home/build/immortalwrt/files/etc/config" \
+            -v "${{ github.workspace }}/x86-64/imm.config:/home/build/immortalwrt/.config" \
+            -v "${{ github.workspace }}/shell:/home/build/immortalwrt/shell" \
+            -v "${{ github.workspace }}/x86-64/build24.sh:/home/build/immortalwrt/build.sh" \
+            -e PROFILE=$profile \
+            -e INCLUDE_DOCKER=$include_docker \
+            -e ENABLE_PPPOE=${{ inputs.enable_pppoe }} \
+            -e PPPOE_ACCOUNT=${{ inputs.pppoe_account }} \
+            -e PPPOE_PASSWORD=${{ inputs.pppoe_password }} \
+            -e PACKAGE_PROFILE=$package_profile \
+            -e GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} \
+          immortalwrt/imagebuilder:x86-64-openwrt-${luci_version} /bin/bash /home/build/immortalwrt/build.sh
+      # ======== 修改点 4 结束 ========
 
       - name: ✅ 复制固件到根目录
         run: |
