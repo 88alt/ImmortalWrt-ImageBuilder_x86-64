@@ -73,6 +73,14 @@
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-rtp2httpd luci-i18n-rtp2httpd-zh-cn"
 # 静态文件服务器dufs
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-dufs-zh-cn"
+# ======== 修改点开始 ========
+# socat 端口转发
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-socat"
+# floatip 浮动网关
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES floatip luci-app-floatip"
+# iperf3 网络性能测试工具
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES iperf3"
+# ======== 修改点结束 ========
 
 #===========================以下imm仓库内的软件==============================↓
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-3cat-zh-cn"
