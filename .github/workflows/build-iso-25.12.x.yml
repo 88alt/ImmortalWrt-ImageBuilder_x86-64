@@ -22,18 +22,14 @@ on:
       custom_router_ip:
         description: "请设置路由器的管理地址(仅对多网口路由器有效) 格式:192.168.x.1 或 10.x.x.1"
         required: true
-        default: "192.168.100.1"
+        default: "192.168.2.1"
       # ======== 修改点 1 结束 ========
+      # ======== 修改点 2：profile 改为直接输入MB数值，与非ISO版统一单位，避免原先G/M两套单位来回换算出错 ========
       profile:
-        description: '选择软件包空间大小'
+        description: '请输入要编译固件大小 单位(MB)'
         required: true
-        type: choice
-        default: '1G'
-        options:
-          - '1G'
-          - '2G'
-          - '3G'
-          - '4G'
+        default: '1024'
+      # ======== 修改点 2 结束 ========
       enable_store:
         description: "集成 store 商店"
         required: false
@@ -47,6 +43,18 @@ on:
         options:
           - 'yes'
           - 'no'
+      # ======== 修改点 3：新增第三方插件配置方案选择，对应不同路由器专属插件包，默认沿用 shell/apk-custom-packages.sh ========
+      package_profile:
+        description: "选择第三方插件配置方案(对应不同路由器)"
+        required: true
+        type: choice
+        default: 'default'
+        options:
+          - 'default'
+          - '192.168.2.1'
+          - '192.168.2.2'
+          - '192.168.2.5'
+      # ======== 修改点 3 结束 ========
       enable_pppoe:
         description: "是否配置PPPoE拨号信息?"
         required: true
@@ -76,13 +84,13 @@ jobs:
       - name: Set executable permissions
         run: chmod +x ${{ github.workspace }}/x86-64/build25.sh
 
-      # ======== 修改点 2：补上写入自定义IP文件的步骤，对齐非ISO版workflow ========
+      # ======== 修改点 4：补上写入自定义IP文件的步骤，对齐非ISO版workflow ========
       - name: Save Custom Router IP into OpenWrt files
         run: |
           mkdir -p "${{ github.workspace }}/custom"
           echo "${{ github.event.inputs.custom_router_ip }}" > "${{ github.workspace }}/custom/custom_router_ip.txt"
           echo "您设置的路由器管理地址是:${{ github.event.inputs.custom_router_ip }}"
-      # ======== 修改点 2 结束 ========
+      # ======== 修改点 4 结束 ========
       
       - name: Validate PPPoE Inputs
         run: |
@@ -101,28 +109,14 @@ jobs:
             echo "❎ 未启用 luci-app-store"
           fi
 
+      # ======== 修改点 5：不再做 G→MB 换算，直接透传已是MB数值的 $profile；保留 GITHUB_TOKEN 透传，新增 PACKAGE_PROFILE 透传 ========
       - name: ✅ 正在构建ImmortalWrt固件25.12.x
         run: |
           profile="${{ github.event.inputs.profile }}"
-          case "$profile" in
-            1G)
-              ROOTFS_SIZE=1024
-              ;;
-            2G)
-              ROOTFS_SIZE=2048
-              ;;
-            3G)
-              ROOTFS_SIZE=3072
-              ;;
-            4G)
-              ROOTFS_SIZE=4096
-              ;;
-          esac
-          echo "ROOTFS_SIZE=$ROOTFS_SIZE" >> $GITHUB_ENV
           include_docker="${{ github.event.inputs.include_docker }}"
           luci_version="${{ github.event.inputs.luci_version }}"
-          echo "Building for rootfs_size: $profile"
-          # ======== 修改点 3：① 传入 GITHUB_TOKEN，避免容器内 curl 调 GitHub API 时被匿名限流(60次/小时)；② PROFILE 改传 $ROOTFS_SIZE（换算后的纯数字），原来的 $profile 是"1G"这种带字母的标签，make image 的 ROOTFS_PARTSIZE 不认这种格式 ========
+          package_profile="${{ github.event.inputs.package_profile }}"
+          echo "Building for profile(MB): $profile"
           docker run --rm -i \
             --user root \
             -v "${{ github.workspace }}/bin:/home/build/immortalwrt/bin" \
@@ -131,14 +125,15 @@ jobs:
             -v "${{ github.workspace }}/x86-64/imm25.config:/home/build/immortalwrt/.config" \
             -v "${{ github.workspace }}/shell:/home/build/immortalwrt/shell" \
             -v "${{ github.workspace }}/x86-64/build25.sh:/home/build/immortalwrt/build.sh" \
-            -e PROFILE=$ROOTFS_SIZE \
+            -e PROFILE=$profile \
             -e INCLUDE_DOCKER=$include_docker \
             -e ENABLE_PPPOE=${{ inputs.enable_pppoe }} \
             -e PPPOE_ACCOUNT=${{ inputs.pppoe_account }} \
             -e PPPOE_PASSWORD=${{ inputs.pppoe_password }} \
+            -e PACKAGE_PROFILE=$package_profile \
             -e GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} \
           immortalwrt/imagebuilder:x86-64-openwrt-${luci_version} /bin/bash /home/build/immortalwrt/build.sh
-          # ======== 修改点 3 结束 ========
+      # ======== 修改点 5 结束 ========
 
       - name: ✅ 复制固件到根目录
         run: |
