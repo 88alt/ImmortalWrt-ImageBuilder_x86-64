@@ -1,7 +1,21 @@
 #!/bin/bash
 # Log file for debugging
 # 目前支持少部分第三方软件apk 通过打开shell/apk-custom-packages.sh的注释来集成
-source shell/apk-custom-packages.sh
+# ======== 修改点 1：根据 PACKAGE_PROFILE 环境变量选择对应的第三方插件配置文件；default 或未设置时仍使用 shell/apk-custom-packages.sh ========
+if [ -z "$PACKAGE_PROFILE" ] || [ "$PACKAGE_PROFILE" = "default" ]; then
+    PKG_PROFILE_FILE="shell/apk-custom-packages.sh"
+else
+    PKG_PROFILE_FILE="shell/apk-custom-packages_${PACKAGE_PROFILE}.sh"
+fi
+
+if [ -f "$PKG_PROFILE_FILE" ]; then
+    echo "✅ 使用插件配置文件: $PKG_PROFILE_FILE"
+    source "$PKG_PROFILE_FILE"
+else
+    echo "⚠️ 未找到 $PKG_PROFILE_FILE，回退使用默认配置 shell/apk-custom-packages.sh"
+    source shell/apk-custom-packages.sh
+fi
+# ======== 修改点 1 结束 ========
 echo "第三方apk软件包: $CUSTOM_PACKAGES"
 LOGFILE="/tmp/uci-defaults-log.txt"
 echo "Starting 99-custom.sh at $(date)" >> $LOGFILE
@@ -33,11 +47,11 @@ else
   mkdir -p /home/build/immortalwrt/extra-packages
   cp -r /tmp/store-apk-repo/run/x86/* /home/build/immortalwrt/extra-packages/
 
-  # ======= 修改点 1：同步自建插件库 apk-extra =======
+  # ======= 修改点 2：同步自建插件库 apk-extra =======
   echo "🔄 正在同步扩展插件库 Cloning apk-extra repo..."
   git clone --depth=1 https://github.com/timeflysoon/apk-extra.git /tmp/apk-extra-repo
   cp -r /tmp/apk-extra-repo/run/x86/* /home/build/immortalwrt/extra-packages/
-  # ======= 修改点 1 结束 =======
+  # ======= 修改点 2 结束 =======
 
   echo "✅ Run files copied to extra-packages:"
   # 解压并拷贝apk到packages目录
