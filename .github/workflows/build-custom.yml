@@ -1,0 +1,58 @@
+name: "Build Custom OpenWrt Installer ISO"
+
+on:
+  workflow_dispatch:
+    inputs:
+      download_url:
+        description: '请输入下载地址(扩展名 .img.gz/.img.xz/.img.zip)'
+        required: true
+        default: 'https://default.example.com/file.img.gz'
+
+# 显式添加权限，确保 Release 发布正常
+permissions:
+  contents: write
+
+
+jobs:
+  build-release:
+    name: "Build and Release"
+    runs-on: "ubuntu-22.04"
+
+    steps:
+      - name: "Checking out git repository"
+        uses: actions/checkout@v2
+
+      - name: Set executable permissions
+        run: |
+          chmod +x "${{ github.workspace }}/custom.sh"
+          chmod +x "${{ github.workspace }}/supportFiles/custom/build.sh"
+
+      - name: Validate Download URL
+        run: |
+          DEFAULT_URL="https://default.example.com/file.img.gz"
+          USER_INPUT_URL="${{ github.event.inputs.download_url }}"
+          
+          if [[ "$USER_INPUT_URL" == "$DEFAULT_URL" ]]; then
+            echo "❌ 错误：请修改默认下载地址！当前地址为无效占位符。"
+            exit 1
+          fi
+          
+          if [[ ! "$USER_INPUT_URL" =~ ^https?://.+\.[gG][zZ]$|^https?://.+\.[xX][zZ]$|^https?://.+\.[zZ][iI][pP]$ ]]; then
+            echo "❌ 错误：地址需以 http(s) 开头且扩展名为 .gz/.xz/.zip"
+            echo "当前输入：$USER_INPUT_URL"
+            exit 1
+          fi
+
+      - name: "Build Image"
+        run: |
+          download_url="${{ github.event.inputs.download_url }}"
+          ./custom.sh "$download_url"
+
+      - name: "Publish"
+        uses: softprops/action-gh-release@v2.2.1
+        with:
+          tag_name: "Custom-Installer-x86_64-ISO"
+          body_path: "${{ github.workspace }}/supportFiles/custom/info.md"
+          files: |
+            output/custom-installer-x86_64.iso
+          token: "${{ secrets.GITHUB_TOKEN }}"
