@@ -26,7 +26,7 @@ on:
       # ======== 修改点 1 结束 ========
       # ======== 修改点 2：profile 改为直接输入MB数值，与非ISO版统一单位，避免原先G/M两套单位来回换算出错 ========
       profile:
-        description: '请输入要编译固件大小 单位(MB)'
+        description: '请输入 rootfs 分区大小 单位(MB)'
         required: true
         default: '1024'
       # ======== 修改点 2 结束 ========
