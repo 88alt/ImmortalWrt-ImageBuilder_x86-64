@@ -28,7 +28,7 @@ on:
         default: "192.168.2.1"
       # ======== 修改点 1 结束 ========
       profile:
-        description: '请输入要编译固件大小 单位(MB)'
+        description: '请输入 rootfs 分区大小 单位(MB)'
         required: true
         default: '1024'
       include_docker:
