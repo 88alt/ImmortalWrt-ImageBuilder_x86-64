@@ -34,7 +34,7 @@ find "$BASE_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.apk" ! -path "$TEMP_DI
 # 若某条目在 TARGET_DIR 中找不到同名文件，只警告不中断构建。
 # ============================================================
 WHITELIST_FILES="
-luci-app-quickstart-0.12.8-r1.apk
+luci-app-quickstart-0.12.10-r1.apk
 quickstart-0.13.0-r1.apk
 luci-app-turboacc-26.244.14891~b50b52f-r1.apk
 luci-i18n-turboacc-zh-cn-26.244.14891~b50b52f.apk
